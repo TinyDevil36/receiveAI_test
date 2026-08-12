@@ -1,0 +1,40 @@
+name: AI News Push
+
+on:
+  schedule:
+    # GitInstances parse cron-style strings as UTC. Beijing 08:00-10:00 = 00:00-02:00 UTC.
+    # Runs at :00, :10, :20, :30, :40, :50 from 00:00-01:00 and :10,:20 at 01:00 (UTC).
+    # Script itself re-checks the Beijing window, so runs landing outside are no-ops.
+    - cron: "0,10,20,30,40,50 0 * * *"
+    - cron: "10,20 1 * * *"
+
+  workflow_dispatch:
+    inputs:
+      force_window:
+        description: "跳过窗口检查(任意时间测试推送)。输入 true 立即推送"
+        required: false
+        default: "false"
+        type: string
+
+jobs:
+  push-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      FORCE_WINDOW: ${{ inputs.force_window }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run AI news fetch + push
+        run: python scripts/ai_news.py

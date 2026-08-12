@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+rss_cache.json
+.DS_Store
