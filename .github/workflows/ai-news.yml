@@ -2,11 +2,12 @@ name: AI News Push
 
 on:
   schedule:
-    # GitInstances parse cron-style strings as UTC. Beijing 08:00-10:00 = 00:00-02:00 UTC.
-    # Runs at :00, :10, :20, :30, :40, :50 from 00:00-01:00 and :10,:20 at 01:00 (UTC).
-    # Script itself re-checks the Beijing window, so runs landing outside are no-ops.
-    - cron: "0,10,20,30,40,50 0 * * *"
-    - cron: "10,20 1 * * *"
+    # Beijing 07:00-11:00 = UTC 23:00 (prev day) to 03:00.
+    # Runs every 10 min across that span. GitHub Actions schedule can be
+    # delayed by up to 1-2h, so the script window defaults to 07-11 and
+    # dedupe guarantees only one push per day.
+    - cron: "0,10,20,30,40,50 23,0,1,2 * * *"
+    - cron: "0,10,20,30,40,50 3 * * *"
 
   workflow_dispatch:
     inputs:
