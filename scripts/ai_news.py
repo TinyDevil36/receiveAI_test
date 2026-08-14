@@ -240,22 +240,10 @@ def main():
         log("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not configured. Nothing to do.")
         return 0
 
-    # Window check (Beijing time). PUSH_START_HOUR/PUSH_END_HOUR control the
-    # push window (default 07:00-11:00). Wide window tolerates GitHub Actions
-    # schedule delays, while dedupe still guarantees only one push per day.
+    # No time-window restriction. GitHub Actions schedule can be delayed by
+    # hours, so we rely solely on date filter + dedupe: push today's items once,
+    # then skip on every later run that day. Use FORCE_WINDOW for manual tests.
     now_bj = datetime.now(BEIJING)
-    if os.environ.get("FORCE_WINDOW", "").lower() in ("1", "true", "yes"):
-        log("FORCE_WINDOW set, skipping window check.")
-        now_bj = now_bj.replace(hour=8, minute=30)
-    try:
-        start_h = int(os.environ.get("PUSH_START_HOUR", "7"))
-        end_h = int(os.environ.get("PUSH_END_HOUR", "11"))
-    except ValueError:
-        start_h, end_h = 7, 11
-    hour, minute = now_bj.hour, now_bj.minute
-    if not (start_h, 0) <= (hour, minute) <= (end_h, 0):
-        log(f"Outside push window ({start_h:02d}:00-{end_h:02d}:00 Beijing), current {now_bj:%H:%M}, exiting.")
-        return 0
 
     try:
         run_cache_setup()

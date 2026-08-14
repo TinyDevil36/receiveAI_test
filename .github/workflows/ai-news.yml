@@ -2,20 +2,13 @@ name: AI News Push
 
 on:
   schedule:
-    # Beijing 07:00-11:00 = UTC 23:00 (prev day) to 03:00.
-    # Runs every 10 min across that span. GitHub Actions schedule can be
-    # delayed by up to 1-2h, so the script window defaults to 07-11 and
-    # dedupe guarantees only one push per day.
-    - cron: "0,10,20,30,40,50 23,0,1,2 * * *"
-    - cron: "0,10,20,30,40,50 3 * * *"
+    # Runs every 10 min all day. GitHub Actions schedule is often delayed by
+    # hours, so we no longer restrict by time window: the script pushes the
+    # day's first new items then skips via dedupe for the rest of the day.
+    - cron: "*/10 * * * *"
 
-  workflow_dispatch:
-    inputs:
-      force_window:
-        description: "跳过窗口检查(任意时间测试推送)。输入 true 立即推送"
-        required: false
-        default: "false"
-        type: string
+  workflow_dispatch: {}
+    # Manual trigger from the Actions tab, e.g. to test a push.
 
 jobs:
   push-news:
@@ -24,7 +17,6 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-      FORCE_WINDOW: ${{ inputs.force_window }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
