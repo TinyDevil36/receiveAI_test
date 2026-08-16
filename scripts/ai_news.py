@@ -44,8 +44,6 @@ TELEGRAM_API_BASE = os.environ.get("TELEGRAM_API_BASE", "https://api.telegram.or
 SEND_SILENT = os.environ.get("SEND_SILENT", "").lower() in ("1", "true", "yes")
 
 CACHE_FILE = "rss_cache.json"
-CACHE_KEY = "ai-news-pushed-ids"
-GITHUB_REPO = os.environ.get("GITHUB_REPOSITORY", "")
 
 # --------------------------------------------------------------------------
 # Helpers
@@ -164,74 +162,6 @@ def send_telegram(text):
     return True
 
 
-def run_cache_setup():
-    """Restore previous cache (if any) so dedupe works across runs in one day."""
-    if not GITHUB_REPO or not os.environ.get("ACTIONS_CACHE_URL"):
-        return
-    try:
-        import httpx
-
-        url = os.environ["ACTIONS_CACHE_URL"].rstrip("/") + "/_apis/actioncache/caches"
-        params = {"keys": CACHE_KEY, "repositoryId": GITHUB_REPO}
-        headers = {"Authorization": f"Bearer {os.environ['ACTIONS_RUNTIME_TOKEN']}"}
-        resp = httpx.get(url, params=params, headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("archiveLocation"):
-            archive = httpx.get(data["archiveLocation"], timeout=60)
-            archive.raise_for_status()
-            import io
-            import zipfile
-
-            with zipfile.ZipFile(io.BytesIO(archive.content)) as zf:
-                zf.extractall(".")
-                log(f"Cache restored: {CACHE_FILE}")
-    except Exception as exc:
-        log(f"Cache restore skipped: {exc}")
-
-
-def run_cache_save():
-    """Upload current cache back to Actions so the next run sees it."""
-    if not GITHUB_REPO or not os.path.exists(CACHE_FILE):
-        return
-    try:
-        import io
-        import zipfile
-
-        import httpx
-
-        url = os.environ["ACTIONS_CACHE_URL"].rstrip("/") + "/_apis/actioncache/caches"
-        headers = {"Authorization": f"Bearer {os.environ['ACTIONS_RUNTIME_TOKEN']}"}
-
-        resp = httpx.get(url, params={"repositoryId": GITHUB_REPO, "keys": CACHE_KEY}, headers=headers, timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        if data.get("cacheKey"):
-            cache_id = data["cacheId"]
-            url_put = f"{os.environ['ACTIONS_CACHE_URL'].rstrip('/')}/_apis/actioncache/caches/{cache_id}"
-            httpx.delete(url_put, headers=headers, timeout=30)
-
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            zf.write(CACHE_FILE, CACHE_FILE)
-        data_bytes = buf.getvalue()
-
-        import hashlib
-
-        resp = httpx.post(
-            os.environ["ACTIONS_CACHE_URL"].rstrip("/") + "/_apis/actioncache/caches",
-            json={"key": CACHE_KEY, "version": "1", "repositoryId": GITHUB_REPO},
-            headers={**headers, "Content-Type": "application/json"},
-            timeout=30,
-        )
-        if resp.status_code in (200, 201):
-            resp = httpx.put(resp.json()["archiveLocation"], content=data_bytes, timeout=120)
-            resp.raise_for_status()
-            log("Cache saved")
-    except Exception as exc:
-        log(f"Cache save skipped: {exc}")
-
-
 # --------------------------------------------------------------------------
 # Main
 # --------------------------------------------------------------------------
@@ -242,12 +172,11 @@ def main():
 
     # No time-window restriction. GitHub Actions schedule can be delayed by
     # hours, so we rely solely on date filter + dedupe: push today's items once,
-    # then skip on every later run that day. Use FORCE_WINDOW for manual tests.
+    # then skip on every later run that day. Dedupe state (rss_cache.json) is
+    # saved/restored by the official actions/cache step in the workflow.
     now_bj = datetime.now(BEIJING)
 
     try:
-        run_cache_setup()
-
         pushed = set()
         if os.path.exists(CACHE_FILE):
             try:
@@ -297,7 +226,6 @@ def main():
         json.dump({"pushed_ids": sorted(pushed)}, fh, ensure_ascii=False)
     log(f"Pushed {len(fresh)} items, marked as read.")
 
-    run_cache_save()
     return 0
 
 

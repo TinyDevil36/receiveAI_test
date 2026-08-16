@@ -29,5 +29,24 @@ jobs:
       - name: Install dependencies
         run: pip install -r scripts/requirements.txt
 
+      # Restore the dedupe state (rss_cache.json) from the latest saved run.
+      # restore-keys matches the most recent cache whose key starts with "ai-news-".
+      - name: Restore pushed-id cache
+        uses: actions/cache/restore@v4
+        with:
+          path: rss_cache.json
+          key: ai-news-cache
+          restore-keys: |
+            ai-news-cache-
+
       - name: Run AI news fetch + push
         run: python scripts/ai_news.py
+
+      # Save the dedupe state so the next run skips already-pushed items.
+      # The cache key must be unique per save (cache entries are immutable).
+      - name: Save pushed-id cache
+        uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: rss_cache.json
+          key: ai-news-cache-${{ github.run_id }}
